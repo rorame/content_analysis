@@ -1,0 +1,149 @@
+---
+title: "Контент анализ произведения М.А. Булгакова Мастер и Маргарита"
+author: "Roman Menyalschikov"
+date: "04 11 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment = "", tidy = T)
+
+library(tm)
+library(tidyverse)
+library(wordcloud)
+library(RColorBrewer)
+
+
+toSpace <- content_transformer(function(x, pattern)
+  gsub(pattern, " ", x))
+
+slovar <- read.csv(".\\data\\emo_dict.csv", 
+                   sep = ";",
+                   encoding = "UTF-8",
+                   stringsAsFactors = F) %>% 
+  mutate(tag = factor(tag))
+
+slovar$steam_words = stemDocument(slovar[[1]], "russian")
+
+fitt <- read.csv(".\\data\\fit.csv", sep = " ")
+
+mm_full_1 <- readLines(".\\data\\mm1.txt", 
+                     encoding = "UTF-8")
+
+mm_full_2 <- readLines(".\\data\\mm2.txt", 
+                       encoding = "UTF-8")
+
+mm_corpus_1 <- VCorpus(VectorSource(mm_full_1)) %>% 
+  tm_map(toSpace, "–") %>%
+  tm_map(toSpace, "\\,") %>% 
+  tm_map(toSpace, "\\«") %>% 
+  tm_map(toSpace, "\\»") %>% 
+  tm_map(toSpace, "\\:") %>% 
+  tm_map(toSpace, "\\?") %>% 
+  tm_map(toSpace, "\\!") %>% 
+  tm_map(toSpace, "\\...") %>% 
+  tm_map(content_transformer(tolower)) %>% 
+  tm_map(removeNumbers) %>% 
+  tm_map(removePunctuation) %>% 
+  tm_map(stripWhitespace) %>% 
+  tm_map(removeWords, stopwords("russian")) %>% 
+  tm_map(removeWords,
+         c("это", "очень", "чтото", "нету"))
+
+tab_mm_1 <- TermDocumentMatrix(mm_corpus_1) %>% 
+  as.matrix()
+
+tab_mm_1 <- sort(rowSums(tab_mm_1), decreasing = T)
+tab_mm_1 <- data.frame(steam_words = names(tab_mm_1),
+                       freq = tab_mm_1)
+
+mm_corpus_2 <- VCorpus(VectorSource(mm_full_2)) %>% 
+  tm_map(toSpace, "–") %>%
+  tm_map(toSpace, "\\,") %>% 
+  tm_map(toSpace, "\\«") %>% 
+  tm_map(toSpace, "\\»") %>% 
+  tm_map(toSpace, "\\:") %>% 
+  tm_map(toSpace, "\\?") %>% 
+  tm_map(toSpace, "\\!") %>% 
+  tm_map(toSpace, "\\...") %>% 
+  tm_map(content_transformer(tolower)) %>% 
+  tm_map(removeNumbers) %>% 
+  tm_map(removePunctuation) %>% 
+  tm_map(stripWhitespace) %>% 
+  tm_map(removeWords, stopwords("russian")) %>% 
+  tm_map(removeWords,
+         c("это", "тебе", "чтото"))
+
+tab_mm_2 <- TermDocumentMatrix(mm_corpus_2) %>% 
+  as.matrix()
+
+tab_mm_2 <- sort(rowSums(tab_mm_2), decreasing = T)
+tab_mm_2 <- data.frame(steam_words = names(tab_mm_2),
+                  freq = tab_mm_2)
+
+```
+
+Для контент анализа взят роман М.А. Булгакова "Мастер и Маргарита". Рассмотрим
+количество слов, имеющих положительную и нейтральную оценку, в каждой главе произедения (см. рис. 1). Для определения эмоциональной окраски слова использовался [тональный словарь русского языка](https://github.com/dkulagin/kartaslov/tree/master/dataset/emo_dict)
+
+Всего в романе было использовано `r sum(fitt$sum[fitt$tag == "PSTV"])` слов с положительной эмоциональной окраской и `r sum(fitt$sum[fitt$tag == "NGTV"])` с отрицательной. Отрицательных на `r sum(fitt$sum[fitt$tag == "NGTV"]) - sum(fitt$sum[fitt$tag == "PSTV"])` слова больше. Среднее значени по всему произведению положительных слов составлет - `r round(mean(fitt$sum[fitt$tag == "PSTV"]), 2)`, а отрицательных `r round(mean(fitt$sum[fitt$tag == "NGTV"]), 2)`. Максимальное количество положительных слов содержится в главе 24 Извлечение мастера (`r max(fitt$sum[fitt$tag == "PSTV"])`), так как во время бала сатаны Маргарита смогла увидеть возлюбленного - Мастера. Максимальное количество отрицательных содержится в главе 2 Понтий Пилат (`r max(fitt$sum[fitt$tag == "NGTV"])`), так как в ней описывает грозный прокуратор Иудеи.
+
+Анализируя рисунок 1 можно заметить, что распределение эмоционально окрашенных слов волнообразно и в целом количество положительных слов соотвествует количеству отрицательных слов по главам. Из этого распределения можно сделать вывод, что автор в одних главах фиксирует внимание читателя на повествовании, которое содержит больше эмоциаонально окрашенных слов, а в других - на описании, в котором больше нейтральных слов. 
+
+```{r, fig.cap = "Рис.1 распределение слов с положительным и отрциательным оттенками по главам в романе М.А. Булгакова 'Мастер и Маргарита'"}
+p <- ggplot()+
+  geom_col(fitt %>% filter(tag == "PSTV") %>%
+             mutate(glava = factor(glava, levels = glava)), 
+                 mapping = aes(x = glava,
+                               y = sum),
+                 fill = 'yellow',
+                 color = 'orange') +
+  geom_col(fitt %>% filter(tag == "NGTV")%>%
+             mutate(glava = factor(glava, levels = glava)),
+    mapping = aes(x = glava, 
+                  y = -1 * sum),
+    fill = 'lightgrey',
+    color = 'darkgrey')
+
+p +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90),
+        plot.title = element_text(size = 12, hjust = 0.5, family = "sans"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+```
+
+На рисунке 2 представлено облако слов, которое составлено по первой части романа. Можно заменить, что превалируют имена собственный и глаголы, которые описывают процесс разговора (спросил, ответил). В этой части мы еще не знакомы с Маргаритой и Мастером, поэтому их имен нет в облаке.
+
+```{r, fig.cap = "Рис.2 облако слов по первой части романа М.А. Булгакова 'Мастер и Маргарита'"}
+wordcloud(words = tab_mm_1 $steam_words, 
+          freq = tab_mm_1 $freq,
+          min.freq = 10,
+          max.words = 100,
+          scale = c(3, .5), 
+          random.order = F,
+          colors = brewer.pal(8, "Dark2"),
+          rot.per = 0)
+```
+
+На рисунке 3 представлено облако слов, которое составлено по второй части романа. Можно заметить, что доминирующие слова - это Маргарита, Воланд и имена его Приспешников. Этим персонажем уделялось наибольшее внимание во второй части романа.
+
+```{r, fig.cap = "Рис.3 облако слов по второй части романа М.А. Булгакова 'Мастер и Маргарита'"}
+wordcloud(words = tab_mm_2$steam_words, 
+          freq = tab_mm_2$freq,
+          min.freq = 10,
+          max.words = 100,
+          scale = c(3, .5), 
+          random.order = F,
+          colors = brewer.pal(8, "Dark2"),
+          rot.per = 0)
+```
+
+Таким образом, мы провели небольшой контент анализ романа М.А. Булгакова "Мастер и Маргарита". Нам удалось проследить закономерное изменение эмоционально окрашенных слов на протяженни всего романа, а таже удалось построить облака слов, которые позволяют оценить наиболее частовстречаемые слова в той или иной главе.
+
+
+
+
+
+
+
